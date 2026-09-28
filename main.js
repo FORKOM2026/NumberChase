@@ -47,13 +47,34 @@
 // elemen menu/HUD saling tumpang tindih saat diperkecil browser.
 // ============================================================
 
+function ensureMobileViewport() {
+    try {
+        let meta = document.querySelector('meta[name="viewport"]');
+        if (!meta) {
+            meta = document.createElement('meta');
+            meta.name = 'viewport';
+            document.head.appendChild(meta);
+        }
+        meta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+        if (document.body) {
+            document.body.style.margin = '0';
+            document.body.style.padding = '0';
+            document.body.style.overflow = 'hidden';
+            document.body.style.background = '#061b10';
+        }
+    } catch (e) {
+        console.log('Viewport mobile tidak dapat diatur:', e);
+    }
+}
+
 const MOBILE_BREAKPOINT = 600;
 let gameCanvas = null;
 let touchHandling = false;
 let lastTouchMs = -10000;
 
 function isMobileLayout() {
-    return windowWidth <= MOBILE_BREAKPOINT;
+    let vw = (window.innerWidth || windowWidth || 0);
+    return vw <= MOBILE_BREAKPOINT;
 }
 
 function getViewScale() {
@@ -64,9 +85,11 @@ function getViewScale() {
 }
 
 function fitCanvasToWindow() {
+    let vw = window.innerWidth || windowWidth;
+    let vh = window.innerHeight || windowHeight;
     resizeCanvas(
-        Math.max(1, Math.floor(windowWidth)),
-        Math.max(1, Math.floor(windowHeight))
+        Math.max(1, Math.floor(vw)),
+        Math.max(1, Math.floor(vh))
     );
 
     if (gameCanvas && gameCanvas.elt) {
@@ -707,16 +730,21 @@ function preload() {
 
 function setup() {
 
+    ensureMobileViewport();
+
     let viewK = getViewScale();
 
     pixelDensity(
         Math.min(2, window.devicePixelRatio || 1)
     );
 
+    let canvasW = isMobileLayout() ? (window.innerWidth || windowWidth) : windowWidth;
+    let canvasH = isMobileLayout() ? (window.innerHeight || windowHeight) : windowHeight;
+
     let canvas =
         createCanvas(
-            Math.max(1, Math.floor(windowWidth * viewK)),
-            Math.max(1, Math.floor(windowHeight * viewK))
+            Math.max(1, Math.floor(canvasW * viewK)),
+            Math.max(1, Math.floor(canvasH * viewK))
         );
 
     gameCanvas = canvas;
@@ -2177,6 +2205,11 @@ function drawLevelSelect() {
 function drawAbout() {
     drawMenuBackground();
 
+    if (isMobileLayout()) {
+        drawAboutMobile();
+        return;
+    }
+
     // Panel responsif
     let w = min(720, width * 0.90);
     let h = min(580, height * 0.85);
@@ -2334,6 +2367,61 @@ function drawAbout() {
         drawButton(x + w - btnW - 30, bottomY, btnW, btnH, "‹  Sebelumnya", "#388E3C");
     }
 }
+function drawAboutMobile() {
+    let w = min(380, width * 0.92);
+    let h = min(790, height * 0.91);
+    let x = width / 2 - w / 2;
+    let y = height / 2 - h / 2;
+    drawPanel(x, y, w, h);
+
+    fill(255, 215, 0); textFont("Luckiest Guy"); textAlign(CENTER, CENTER);
+    textSize(min(28, w * 0.075)); text("TENTANG GAME", width / 2, y + 31);
+    fill(255,255,255,210); textFont("Fredoka One"); textSize(10.5);
+    text(aboutSlide === 0 ? "SLIDE 1 • PENJELASAN GAME" : "SLIDE 2 • CAPAIAN & TUJUAN PEMBELAJARAN", width/2, y+58);
+
+    let cardX=x+13, cardY=y+78, cardW=w-26, cardH=h-137;
+    fill(38,28,17,235); stroke(218,170,0); strokeWeight(2); rect(cardX,cardY,cardW,cardH,15); noStroke();
+
+    if (aboutSlide === 0) {
+        fill(255,215,0); textFont("Luckiest Guy"); textSize(17);
+        text("NUMBER CHASE - NATURE MATH ADVENTURE", width/2, cardY+28);
+        fill(255); textFont("Fredoka One"); textSize(10.5);
+        let lines=[
+            "Media Pembelajaran Interaktif (MPI) untuk mapel",
+            "Matematika Kelas 2 / Fase A, dengan materi",
+            "penjumlahan dan pengurangan.","",
+            "Dikemas sebagai game lari (running game) bertema",
+            "alam: siswa berlari melintasi 3 jalur dan memilih",
+            "jalur dengan jawaban yang benar.","",
+            "Menggunakan strategi Drill and Practice agar siswa",
+            "berlatih berhitung berulang dengan cara yang seru.","",
+            "Fitur: 3 tingkat kesulitan, efek visual & partikel,",
+            "sistem nyawa, timer per soal, dan skor tertinggi."
+        ];
+        let yy=cardY+58; for (let line of lines){ text(line,width/2,yy); yy+=21; }
+    } else {
+        fill(255,215,0); textFont("Luckiest Guy"); textSize(18);
+        text("CAPAIAN & TUJUAN PEMBELAJARAN", width/2, cardY+28);
+        let cpY=cardY+48, cpH=112;
+        fill(92,150,64,180); rect(cardX+10,cpY,cardW-20,cpH,12);
+        fill(255,215,0); textSize(14); text("CAPAIAN PEMBELAJARAN (CP)",width/2,cpY+21);
+        fill(255); textFont("Fredoka One"); textSize(10.5);
+        text("Peserta didik dapat menunjukkan pemahaman operasi",width/2,cpY+52);
+        text("penjumlahan dan pengurangan bilangan cacah 1 sampai 20.",width/2,cpY+70);
+        let tpY=cpY+cpH+12, tpH=cardH-(tpY-cardY)-12;
+        fill(67,120,170,180); rect(cardX+10,tpY,cardW-20,tpH,12);
+        fill(255,215,0); textSize(14); text("TUJUAN PEMBELAJARAN (TP)",width/2,tpY+21);
+        fill(255); textFont("Fredoka One"); textSize(9.5); textAlign(LEFT,CENTER);
+        let tx=cardX+19, baseY=tpY+54;
+        let tp=[["1. Mengoperasikan konsep penjumlahan dan","   pengurangan bilangan satuan-satuan."],["2. Mengoperasikan konsep penjumlahan dan","   pengurangan bilangan satuan-puluhan."],["3. Mengoperasikan konsep penjumlahan dan","   pengurangan bilangan puluhan-puluhan."]];
+        for(let i=0;i<3;i++){text(tp[i][0],tx,baseY+i*49);text(tp[i][1],tx,baseY+17+i*49);}
+        textAlign(CENTER,CENTER);
+    }
+    let bw=min(145,w*0.40), by=y+h-44;
+    drawButton(x+16,by,bw,36,"Menu Utama","#D32F2F");
+    drawButton(x+w-bw-16,by,bw,36,aboutSlide===0?"Berikutnya  ›":"‹  Sebelumnya","#388E3C");
+}
+
 // ============================================================
 // PROFIL PENGEMBANG
 // ============================================================
@@ -2341,6 +2429,11 @@ function drawAbout() {
 function drawProfile() {
 
     drawMenuBackground();
+
+    if (isMobileLayout()) {
+        drawProfileMobile();
+        return;
+    }
 
 
     let w = min(940, width * 0.94);
@@ -2708,6 +2801,42 @@ function drawProfile() {
     );
 }
 
+
+function drawProfileMobile() {
+    let w=min(390,width*0.94), h=min(870,height*0.93);
+    let x=width/2-w/2, y=height/2-h/2;
+    drawPanel(x,y,w,h);
+    fill(255,215,0); textFont("Luckiest Guy"); textAlign(CENTER,CENTER); textSize(min(25,w*0.07));
+    text("PROFIL PENGEMBANG",width/2,y+29);
+    fill(255,255,255,225); textFont("Fredoka One"); textSize(8.5);
+    text("NUMBER CHASE - Multimedia Pembelajaran Interaktif",width/2,y+49);
+    text("Matematika Kelas II / Fase A",width/2,y+62);
+    drawSectionLabel("TIM PENGEMBANG",width/2,y+84,w);
+
+    let gap=7, cardW=(w-28-gap*2)/3, cardH=170, top=y+98;
+    for(let i=0;i<3;i++){
+        let cx=x+14+cardW/2+i*(cardW+gap), cy=top+cardH/2; push(); translate(cx,cy);
+        noStroke(); fill(0,0,0,90); rect(-cardW/2+3,-cardH/2+5,cardW,cardH,12);
+        fill(45,38,25,235); rect(-cardW/2,-cardH/2,cardW,cardH,12);
+        let d=min(58,cardW*0.62), py=-cardH/2+39;
+        fill(255,215,0); stroke(70,45,15); strokeWeight(2); ellipse(0,py,d+5,d+5); noStroke(); fill(255); ellipse(0,py,d-2,d-2);
+        if(devImages[i]){let cd=d-7; drawingContext.save(); drawingContext.beginPath(); drawingContext.arc(0,py,cd/2,0,TWO_PI); drawingContext.clip(); imageMode(CENTER); let im=devImages[i],r=im.width/im.height,dw=cd,dh=cd; if(r>1)dw=cd*r; else dh=cd/r; image(im,0,py,dw,dh); drawingContext.restore();}
+        fill(255,225,135); textFont("Fredoka One"); textSize(min(9,cardW*0.105)); text(developers[i].name,0,83-cardH/2);
+        stroke(255,255,255,45); strokeWeight(1); line(-cardW*.36,94-cardH/2,cardW*.36,94-cardH/2); noStroke();
+        fill(255,255,255,225); textSize(min(7.5,cardW*.085)); text(developers[i].nim,0,109-cardH/2);
+        fill(255,255,255,190); textSize(min(7,cardW*.078)); text("Universitas Lambung",0,127-cardH/2); text("Mangkurat",0,140-cardH/2);
+        pop();
+    }
+
+    let sec2Y=top+cardH+22; drawSectionLabel("DOSEN PEMBIMBING",width/2,sec2Y,w);
+    let pw=w-28, ph=86, py=sec2Y+10; push(); translate(width/2,py+ph/2);
+    noStroke(); fill(0,0,0,90); rect(-pw/2+3,-ph/2+4,pw,ph,13); fill(55,42,20,240); rect(-pw/2,-ph/2,pw,ph,13);
+    noFill(); stroke(255,215,0,200); strokeWeight(2); rect(-pw/2,-ph/2,pw,ph,13); noStroke();
+    let pd=58, px=-pw/2+43; fill(255,215,0); ellipse(px,0,pd+5,pd+5); fill(255); ellipse(px,0,pd-2,pd-2);
+    if(imgPembimbing){let cd=pd-7; drawingContext.save(); drawingContext.beginPath(); drawingContext.arc(px,0,cd/2,0,TWO_PI); drawingContext.clip(); imageMode(CENTER); let im=imgPembimbing,r=im.width/im.height,dw=cd,dh=cd; if(r>1)dw=cd*r; else dh=cd/r; image(im,px,0,dw,dh); drawingContext.restore();}
+    textAlign(LEFT,CENTER); fill(255,225,135); textFont("Fredoka One"); textSize(15); text(pembimbing.name,px+40,-20); fill(255,215,0,220); textSize(9); text("Dosen Pembimbing",px+40,-2); fill(255,255,255,210); textSize(8); text(pembimbing.nip,px+40,15); text(pembimbing.univ,px+40,30); textAlign(CENTER,CENTER); pop();
+    drawButton(width/2-105,y+h-42,210,38,"Menu Utama","#D32F2F");
+}
 
 // ------------------------------------------------------------
 // LABEL SEKSI (dengan garis dekoratif di kiri/kanan)
