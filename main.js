@@ -38,26 +38,44 @@
 // dimainkan. Koordinat sentuhan dikonversi otomatis oleh p5.
 // ============================================================
 
-const MIN_VIEW_SIDE = 480;
+// ============================================================
+// RESPONSIVE / MOBILE SUPPORT
+// ------------------------------------------------------------
+// PC/tablet: tampilan tetap seperti sebelumnya.
+// HP: kanvas mengikuti ukuran viewport tanpa "membesarkan"
+// koordinat internal berdasarkan sisi terpendek. Ini mencegah
+// elemen menu/HUD saling tumpang tindih saat diperkecil browser.
+// ============================================================
+
+const MOBILE_BREAKPOINT = 600;
 let gameCanvas = null;
 let touchHandling = false;
 let lastTouchMs = -10000;
 
+function isMobileLayout() {
+    return windowWidth <= MOBILE_BREAKPOINT;
+}
+
 function getViewScale() {
-    let side = Math.min(windowWidth, windowHeight);
-    if (!side || side <= 0) return 1;
-    return Math.max(1, MIN_VIEW_SIDE / side);
+    // Jangan scale-up kanvas di HP.
+    // P5 akan memakai koordinat viewport langsung sehingga layout
+    // responsif di fungsi draw dapat bekerja secara normal.
+    return 1;
 }
 
 function fitCanvasToWindow() {
-    let k = getViewScale();
     resizeCanvas(
-        Math.ceil(windowWidth * k),
-        Math.ceil(windowHeight * k)
+        Math.max(1, Math.floor(windowWidth)),
+        Math.max(1, Math.floor(windowHeight))
     );
-    if (k > 1 && gameCanvas && gameCanvas.elt) {
-        gameCanvas.elt.style.width = windowWidth + "px";
-        gameCanvas.elt.style.height = windowHeight + "px";
+
+    if (gameCanvas && gameCanvas.elt) {
+        gameCanvas.elt.style.width = "100vw";
+        gameCanvas.elt.style.height = "100vh";
+        gameCanvas.elt.style.maxWidth = "100%";
+        gameCanvas.elt.style.maxHeight = "100%";
+        gameCanvas.elt.style.display = "block";
+        gameCanvas.elt.style.touchAction = "none";
     }
 }
 
@@ -691,24 +709,24 @@ function setup() {
 
     let viewK = getViewScale();
 
-    if (viewK > 1) {
-        pixelDensity(
-            Math.min(2, window.devicePixelRatio || 1)
-        );
-    }
+    pixelDensity(
+        Math.min(2, window.devicePixelRatio || 1)
+    );
 
     let canvas =
         createCanvas(
-            Math.ceil(windowWidth * viewK),
-            Math.ceil(windowHeight * viewK)
+            Math.max(1, Math.floor(windowWidth * viewK)),
+            Math.max(1, Math.floor(windowHeight * viewK))
         );
 
     gameCanvas = canvas;
 
-    if (viewK > 1) {
-        canvas.elt.style.width = windowWidth + "px";
-        canvas.elt.style.height = windowHeight + "px";
-    }
+    canvas.elt.style.width = "100vw";
+    canvas.elt.style.height = "100vh";
+    canvas.elt.style.maxWidth = "100%";
+    canvas.elt.style.maxHeight = "100%";
+    canvas.elt.style.display = "block";
+    canvas.elt.style.touchAction = "none";
 
     if (
         document.getElementById(
@@ -857,15 +875,35 @@ function drawMenuBackground() {
 
     if (imgMenuBg) {
 
+        // COVER: pertahankan rasio asli gambar agar background
+        // tidak melebar/mengerucut saat viewport HP berubah.
         imageMode(CORNER);
 
-        image(
-            imgMenuBg,
-            0,
-            0,
-            width,
-            height
-        );
+        let imgW = imgMenuBg.width;
+        let imgH = imgMenuBg.height;
+
+        if (imgW > 0 && imgH > 0) {
+
+            let scaleCover = max(
+                width / imgW,
+                height / imgH
+            );
+
+            let drawW = imgW * scaleCover;
+            let drawH = imgH * scaleCover;
+
+            let drawX = (width - drawW) / 2;
+            let drawY = (height - drawH) / 2;
+
+            image(
+                imgMenuBg,
+                drawX,
+                drawY,
+                drawW,
+                drawH
+            );
+
+        }
 
         imageMode(CENTER);
 
@@ -1018,30 +1056,41 @@ function drawMainMenu() {
     drawMenuBackground();
     logoBounce += 0.04;
 
-    // ========================================================
-    // 5 LOGO
-    // ========================================================
     drawTopLogos();
 
-    // ========================================================
-    // RESPONSIVE
-    // ========================================================
     let compact = height < 650;
     let veryCompact = height < 540;
+    let mobile = isMobileLayout();
 
     // ========================================================
     // JUDUL
     // ========================================================
     let titleY;
-    if (veryCompact) {
-        titleY = height * 0.17; 
+
+    if (mobile) {
+        // HP: judul diletakkan SETELAH 3 kartu skor agar tidak
+        // tertutup/tumpang tindih.
+        titleY = min(
+            height * 0.43,
+            height - 470
+        );
+
+        if (height < 800) {
+            titleY = height * 0.40;
+        }
+
+    } else if (veryCompact) {
+        titleY = height * 0.17;
     } else if (compact) {
-        titleY = height * 0.21; 
+        titleY = height * 0.21;
     } else {
-        titleY = height * 0.235; 
+        titleY = height * 0.235;
     }
 
-    let titleSize = min(82, width * 0.105, height * 0.12);
+    let titleSize = mobile
+        ? min(62, width * 0.105, height * 0.075)
+        : min(82, width * 0.105, height * 0.12);
+
     let bounce = sin(logoBounce) * 4;
 
     push();
@@ -1049,36 +1098,36 @@ function drawMainMenu() {
     textAlign(CENTER, CENTER);
     textFont("Luckiest Guy");
 
-    // TITLE
     textSize(titleSize);
     stroke(20, 10, 5);
-    strokeWeight(max(5, titleSize * 0.13));
+    strokeWeight(max(4, titleSize * 0.11));
     fill(255, 205, 20);
     text("NUMBER CHASE", 0, 0);
 
-    // SUBTITLE
     stroke(20, 10, 5, 220);
     strokeWeight(3);
     fill(255, 255, 225);
-    textSize(max(17, titleSize * 0.29));
+    textSize(max(14, titleSize * 0.27));
     text("MATA PELAJARAN MATEMATIKA", 0, titleSize * 0.70);
 
-    // MATERI
     fill(205, 255, 205);
     stroke(10, 30, 10, 190);
     strokeWeight(2);
-    textSize(max(16, titleSize * 0.23));
-    text("FASE A • KELAS 2", 0, titleSize * 1.05);
+    textSize(max(14, titleSize * 0.22));
+    text("FASE A • KELAS 2", 0, titleSize * 1.03);
     pop();
 
     // ========================================================
     // 3 HIGH SCORE - KIRI ATAS
     // ========================================================
-    let hsW = min(150, max(125, width * 0.11));
-    let hsH = compact ? 50 : 56;
-    let hsGap = compact ? 6 : 8;
-    let hsX = 20;
-    let hsY = compact ? 105 : 120;
+    let hsW = mobile
+        ? min(155, width * 0.28)
+        : min(150, max(125, width * 0.11));
+
+    let hsH = mobile ? 50 : (compact ? 50 : 56);
+    let hsGap = mobile ? 5 : (compact ? 6 : 8);
+    let hsX = mobile ? 18 : 20;
+    let hsY = mobile ? 115 : (compact ? 105 : 120);
 
     push();
     fill(255, 215, 0);
@@ -1086,99 +1135,188 @@ function drawMainMenu() {
     strokeWeight(3);
     textAlign(LEFT, BOTTOM);
     textFont("Luckiest Guy");
-    textSize(min(18, width * 0.02));
+    textSize(mobile ? 16 : min(18, width * 0.02));
     text("SKOR TERTINGGIMU", hsX, hsY - 8);
     pop();
 
-    drawCategoryHighScore(hsX, hsY, hsW, hsH, "+ PENJUMLAHAN", highScores[1] || 0, "#4CAF50");
-    drawCategoryHighScore(hsX, hsY + hsH + hsGap, hsW, hsH, "- PENGURANGAN", highScores[2] || 0, "#FB8C00");
-    drawCategoryHighScore(hsX, hsY + (hsH + hsGap) * 2, hsW, hsH, "+/- VARIASI", highScores[3] || 0, "#1E88E5");
-
-    // ========================================================
-    // BUTTON MENU & PANEL PETUALANGAN TENGAH
-    // ========================================================
-    let btnW = min(310, width * 0.38);
-    if (compact) {
-        btnW = min(290, width * 0.55);
-    }
-
-    let btnH = compact ? 46 : 50;
-    let gap = compact ? 10 : 12;
-    let totalButtonsH = btnH * 4 + gap * 3;
-
-    let startY = max(
-        titleY + titleSize * 2.0,
-        height * (compact ? 0.56 : 0.54)
+    drawCategoryHighScore(
+        hsX, hsY, hsW, hsH,
+        "+ PENJUMLAHAN", highScores[1] || 0, "#4CAF50"
     );
 
+    drawCategoryHighScore(
+        hsX, hsY + hsH + hsGap, hsW, hsH,
+        "- PENGURANGAN", highScores[2] || 0, "#FB8C00"
+    );
+
+    drawCategoryHighScore(
+        hsX, hsY + (hsH + hsGap) * 2, hsW, hsH,
+        "+/- VARIASI", highScores[3] || 0, "#1E88E5"
+    );
+
+    // ========================================================
+    // BUTTON MENU & PANEL PETUALANGAN
+    // ========================================================
+    let btnW;
+
+    if (mobile) {
+        btnW = min(300, width * 0.54);
+    } else {
+        btnW = min(310, width * 0.38);
+
+        if (compact) {
+            btnW = min(290, width * 0.55);
+        }
+    }
+
+    let btnH = mobile ? 48 : (compact ? 46 : 50);
+    let gap = mobile ? 10 : (compact ? 10 : 12);
+    let totalButtonsH = btnH * 4 + gap * 3;
+
+    let startY;
+
+    if (mobile) {
+        // Beri jarak aman dari judul/subjudul.
+        startY = max(
+            titleY + titleSize * 1.70,
+            height * 0.57
+        );
+    } else {
+        startY = max(
+            titleY + titleSize * 2.0,
+            height * (compact ? 0.56 : 0.54)
+        );
+    }
+
     let maxStartY = height - totalButtonsH - 18;
+
     if (startY > maxStartY) {
         startY = maxStartY;
     }
 
     let buttonX = width / 2 - btnW / 2;
-    let panelW = min(470, width * 0.58);
-    
-    // Sesuaikan header space agar chip yang lebih besar muat
-    let headerSpace = compact ? 95 : 110; 
-    let panelH = totalButtonsH + headerSpace + (compact ? 25 : 30); 
+
+    let panelW = mobile
+        ? min(430, width * 0.76)
+        : min(470, width * 0.58);
+
+    let headerSpace = mobile ? 88 : (compact ? 95 : 110);
+    let panelH = totalButtonsH + headerSpace + (mobile ? 24 : (compact ? 25 : 30));
     let panelX = width / 2 - panelW / 2;
     let panelY = startY - headerSpace;
 
-    // Bayangan panel
     noStroke();
     fill(0, 0, 0, 55);
     rect(panelX + 6, panelY + 8, panelW, panelH, 28);
 
-    // Panel utama
     fill(39, 88, 32, 150);
     rect(panelX, panelY, panelW, panelH, 28);
 
-    // Bingkai tipis
     noFill();
     stroke(205, 232, 135, 150);
     strokeWeight(3);
     rect(panelX + 5, panelY + 5, panelW - 10, panelH - 10, 24);
 
-    // Judul kecil panel
     noStroke();
     fill(255, 222, 95);
     textAlign(CENTER, CENTER);
     textFont("Luckiest Guy");
-    textSize(compact ? 15 : 18);
-    text("JELAJAHI PETUALANGAN ANGKA", width / 2, panelY + (compact ? 25 : 30));
+    textSize(mobile ? 16 : (compact ? 15 : 18));
+    text(
+        "JELAJAHI PETUALANGAN ANGKA",
+        width / 2,
+        panelY + (mobile ? 24 : (compact ? 25 : 30))
+    );
 
     // ========================================================
-    // TIGA INDIKATOR KATEGORI (CHIP) - DIPERBESAR
+    // 3 INDIKATOR KATEGORI (ANTI-TABRAKAN DI HP)
     // ========================================================
-    let chipY = panelY + (compact ? 50 : 60); 
-    let chipW = min(135, panelW * 0.29); // Kotak dilebarkan agar teks muat
-    let chipH = compact ? 26 : 30;       // Kotak ditinggikan
-    let chipGap = 10;
+    let chipY = panelY + (mobile ? 48 : (compact ? 50 : 60));
+    let chipGap = mobile ? 6 : 10;
+    let chipW = mobile
+        ? min(120, (panelW - chipGap * 2) / 3)
+        : min(135, panelW * 0.29);
+    let chipH = mobile ? 28 : (compact ? 26 : 30);
+
     let totalChipW = chipW * 3 + chipGap * 2;
     let chipStartX = width / 2 - totalChipW / 2;
-    
-    let chipLabels = [" PENJUMLAHAN", "PENGURANGAN", "VARIASI"];
-    let chipColors = [[76, 175, 80], [251, 140, 0], [30, 136, 229]];
+
+    let chipLabels = [
+        "PENJUMLAHAN",
+        "PENGURANGAN",
+        "VARIASI"
+    ];
+
+    let chipColors = [
+        [76, 175, 80],
+        [251, 140, 0],
+        [30, 136, 229]
+    ];
 
     for (let i = 0; i < 3; i++) {
+
         let cx = chipStartX + i * (chipW + chipGap);
-        fill(chipColors[i][0], chipColors[i][1], chipColors[i][2], 220);
+
+        fill(
+            chipColors[i][0],
+            chipColors[i][1],
+            chipColors[i][2],
+            220
+        );
+
         rect(cx, chipY, chipW, chipH, 12);
-        
+
         fill(255);
         textFont("Fredoka One");
-        // Ukuran teks dinaikkan drastis dari 7/8 menjadi 11/13
-        textSize(compact ? 11 : 13); 
-        text(chipLabels[i], cx + chipW / 2, chipY + chipH / 2 + 1);
+
+        // Ukuran teks otomatis mengikuti lebar chip.
+        let maxTextSize = mobile ? 11 : (compact ? 11 : 13);
+        textSize(maxTextSize);
+
+        let naturalTextW = textWidth(chipLabels[i]);
+        if (naturalTextW > chipW - 10) {
+            textSize(
+                max(
+                    7,
+                    maxTextSize * ((chipW - 10) / naturalTextW)
+                )
+            );
+        }
+
+        text(
+            chipLabels[i],
+            cx + chipW / 2,
+            chipY + chipH / 2 + 1
+        );
     }
 
-    // Tampilkan tombol
     drawButton(buttonX, startY, btnW, btnH, "Mainkan Game", "#4CAF50");
-    drawButton(buttonX, startY + btnH + gap, btnW, btnH, "Petunjuk Penggunaan", "#66BB6A");
-    drawButton(buttonX, startY + (btnH + gap) * 2, btnW, btnH, "Tentang Game", "#689F38");
-    drawButton(buttonX, startY + (btnH + gap) * 3, btnW, btnH, "Profil Pengembang", "#558B2F");
+    drawButton(
+        buttonX,
+        startY + btnH + gap,
+        btnW,
+        btnH,
+        "Petunjuk Penggunaan",
+        "#66BB6A"
+    );
+    drawButton(
+        buttonX,
+        startY + (btnH + gap) * 2,
+        btnW,
+        btnH,
+        "Tentang Game",
+        "#689F38"
+    );
+    drawButton(
+        buttonX,
+        startY + (btnH + gap) * 3,
+        btnW,
+        btnH,
+        "Profil Pengembang",
+        "#558B2F"
+    );
 }
+
 // ============================================================
 // HIGH SCORE CARD PER KATEGORI
 // ============================================================
@@ -4348,272 +4486,143 @@ function drawFallbackHorse() {
 function drawGameplayHUD() {
 
     if (!currentQuestion) {
-
         return;
-
     }
 
+    let mobile = isMobileLayout();
 
-    let qW =
-        min(
-            360,
-            width * 0.55
-        );
+    // ========================================================
+    // QUESTION PANEL
+    // ========================================================
+    let qW = mobile
+        ? min(300, width * 0.54)
+        : min(360, width * 0.55);
 
-    let qX =
-        width / 2 -
-        qW / 2;
+    let qH = mobile ? 72 : 95;
+    let qX = width / 2 - qW / 2;
+    let qY = mobile ? 12 : 15;
 
-
-    fill(
-        35,
-        25,
-        15,
-        235
-    );
-
-    stroke(
-        130,
-        85,
-        40
-    );
-
-    strokeWeight(4);
-
+    fill(35, 25, 15, 235);
+    stroke(130, 85, 40);
+    strokeWeight(mobile ? 3 : 4);
 
     rect(
         qX,
-        15,
+        qY,
         qW,
-        95,
-        16
+        qH,
+        mobile ? 14 : 16
     );
-
 
     noStroke();
-
-    fill(
-        255,
-        215,
-        0
-    );
-
-    textFont(
-        "Luckiest Guy"
-    );
-
+    fill(255, 215, 0);
+    textFont("Luckiest Guy");
     textSize(
-        min(
-            34,
-            qW * 0.095
-        )
+        mobile
+            ? min(30, qW * 0.11)
+            : min(34, qW * 0.095)
     );
-
 
     text(
         currentQuestion.text,
         width / 2,
-        45
+        mobile ? qY + 27 : 45
     );
-
 
     // TIMER
+    let barW = mobile ? qW * 0.82 : qW * 0.85;
+    let barH = mobile ? 12 : 16;
+    let barX = width / 2 - barW / 2;
+    let barY = mobile ? qY + 49 : 75;
 
-    let barW =
-        qW * 0.85;
+    fill(0, 0, 0, 80);
+    rect(barX, barY, barW, barH, 8);
 
-    let barH = 16;
-
-    let barX =
-        width / 2 -
-        barW / 2;
-
-    let barY = 75;
-
-
-    fill(
+    let pct = max(
         0,
-        0,
-        0,
-        80
+        questionTimeLeft / questionTimeMax
     );
 
-    rect(
-        barX,
-        barY,
-        barW,
-        barH,
-        8
-    );
+    let fillW = barW * pct;
 
+    let barCol = color(76, 175, 80);
 
-    let pct =
-        max(
-            0,
-            questionTimeLeft /
-            questionTimeMax
-        );
-
-
-    let fillW =
-        barW * pct;
-
-
-    let barCol =
-        color(
-            76,
-            175,
-            80
-        );
-
-
-    if (
-        pct <= 0.5
-    ) {
-
-        barCol =
-            color(
-                255,
-                152,
-                0
-            );
-
+    if (pct <= 0.5) {
+        barCol = color(255, 152, 0);
     }
 
-
-    if (
-        pct <= 0.25
-    ) {
-
-        barCol =
-            color(
-                244,
-                67,
-                54
-            );
-
+    if (pct <= 0.25) {
+        barCol = color(244, 67, 54);
     }
-
 
     fill(barCol);
+    rect(barX, barY, fillW, barH, 8);
 
-    rect(
-        barX,
-        barY,
-        fillW,
-        barH,
-        8
-    );
-
-
-    
-
-
-    // NYAWA
+    // ========================================================
+    // NYAWA + SCORE
+    // ========================================================
+    let hudW = mobile ? 125 : 145;
+    let hudH = mobile ? 42 : 45;
+    let hudY = mobile ? 12 : 15;
 
     drawHUDBox(
-        18,
-        15,
-        145,
-        45
+        mobile ? 12 : 18,
+        hudY,
+        hudW,
+        hudH
     );
-
 
     fill(255);
-
-    textFont(
-        "Fredoka One"
-    );
-
-    textSize(20);
-
+    textFont("Fredoka One");
+    textSize(mobile ? 18 : 20);
 
     let hearts =
         "♥".repeat(lives) +
-        "♡".repeat(
-            max(
-                0,
-                3 - lives
-            )
-        );
-
+        "♡".repeat(max(0, 3 - lives));
 
     text(
         hearts,
-        90,
-        38
+        (mobile ? 12 : 18) + hudW / 2,
+        hudY + hudH / 2 + 1
     );
-
-
-    // SCORE
 
     drawHUDBox(
-        width - 163,
-        15,
-        145,
-        45
+        width - hudW - (mobile ? 12 : 18),
+        hudY,
+        hudW,
+        hudH
     );
 
-
-    fill(
-        255,
-        215,
-        0
-    );
-
-    textFont(
-        "Luckiest Guy"
-    );
-
-    textSize(21);
-
+    fill(255, 215, 0);
+    textFont("Luckiest Guy");
+    textSize(mobile ? 19 : 21);
 
     text(
         "★ " + score,
-        width - 90,
-        38
+        width - (mobile ? 12 : 18) - hudW / 2,
+        hudY + hudH / 2 + 1
     );
 
-
+    // ========================================================
     // INFO LEVEL
+    // ========================================================
+    fill(255, 255, 255, 220);
+    textFont("Fredoka One");
+    textSize(mobile ? 12 : 14);
 
-    fill(
-        255,
-        255,
-        255,
-        220
-    );
+    let catName = "PENJUMLAHAN";
 
-    textFont(
-        "Fredoka One"
-    );
-
-    textSize(14);
-
-
-    let catName =
-        "PENJUMLAHAN";
-
-
-    if (
-        currentCategory === 2
-    ) {
-
-        catName =
-            "PENGURANGAN";
-
+    if (currentCategory === 2) {
+        catName = "PENGURANGAN";
     }
 
-
-    if (
-        currentCategory === 3
-    ) {
-
-        catName =
-            "VARIASI";
-
+    if (currentCategory === 3) {
+        catName = "VARIASI";
     }
 
+    let infoY = mobile
+        ? qY + qH + 20
+        : 125;
 
     text(
         catName +
@@ -4623,23 +4632,31 @@ function drawGameplayHUD() {
         (questionIndex + 1) +
         "/10",
         width / 2,
-        125
+        infoY
     );
 
-
+    // ========================================================
     // PAUSE BUTTON
+    // ========================================================
+    let pauseX;
+    let pauseY;
+    let pauseW;
+    let pauseH;
 
-    let pauseX = 20;
-
-    let pauseY = 78;
-
-    let pauseW = 175;
-
-    let pauseH = 52;
-
+    if (mobile) {
+        // Ditaruh di bawah info agar tidak menutupi soal.
+        pauseW = min(145, width * 0.34);
+        pauseH = 42;
+        pauseX = width / 2 - pauseW / 2;
+        pauseY = infoY + 15;
+    } else {
+        pauseX = 20;
+        pauseY = 78;
+        pauseW = 175;
+        pauseH = 52;
+    }
 
     push();
-
 
     let hover =
         mouseX >= pauseX &&
@@ -4647,23 +4664,12 @@ function drawGameplayHUD() {
         mouseY >= pauseY &&
         mouseY <= pauseY + pauseH;
 
-
     if (hover) {
-
         cursor(HAND);
-
     }
 
-
-    fill(
-        0,
-        0,
-        0,
-        70
-    );
-
+    fill(0, 0, 0, 70);
     noStroke();
-
 
     rect(
         pauseX + 4,
@@ -4673,9 +4679,7 @@ function drawGameplayHUD() {
         14
     );
 
-
     fill("#FF9800");
-
 
     rect(
         pauseX,
@@ -4685,58 +4689,47 @@ function drawGameplayHUD() {
         14
     );
 
-
     fill(255);
-
-    textFont(
-        "Fredoka One"
-    );
-
-    textSize(20);
-
+    textFont("Fredoka One");
+    textSize(mobile ? 17 : 20);
 
     text(
         isPaused
             ? "▶  LANJUT"
             : "Ⅱ  PAUSE",
-        pauseX +
-        pauseW / 2,
-        pauseY +
-        pauseH / 2
+        pauseX + pauseW / 2,
+        pauseY + pauseH / 2
     );
-
 
     pop();
 
-
+    // ========================================================
     // CONTROL
+    // ========================================================
+    let controlW = mobile ? 68 : 75;
+    let controlH = mobile ? 50 : 55;
+    let controlY = height - (mobile ? 62 : 80);
 
     drawControlButton(
-        25,
-        height - 80,
-        75,
-        55,
+        mobile ? 18 : 25,
+        controlY,
+        controlW,
+        controlH,
         "◀"
     );
 
-
     drawControlButton(
-        width - 100,
-        height - 80,
-        75,
-        55,
+        width - controlW - (mobile ? 18 : 25),
+        controlY,
+        controlW,
+        controlH,
         "▶"
     );
 
-
     if (isPaused) {
-
         drawPauseOverlay();
-
     }
 }
-
-
 function drawHUDBox(
     x,
     y,
@@ -6252,9 +6245,20 @@ function mousePressed() {
         let veryCompact =
             height < 540;
 
+        let mobile = isMobileLayout();
+
         let titleY;
 
-        if (veryCompact) {
+        if (mobile) {
+            titleY = min(
+                height * 0.43,
+                height - 470
+            );
+
+            if (height < 800) {
+                titleY = height * 0.40;
+            }
+        } else if (veryCompact) {
             titleY = height * 0.17;
         } else if (compact) {
             titleY = height * 0.21;
@@ -6263,30 +6267,44 @@ function mousePressed() {
         }
 
         let titleSize =
-            min(82, width * 0.105, height * 0.12);
+            mobile
+                ? min(62, width * 0.105, height * 0.075)
+                : min(82, width * 0.105, height * 0.12);
 
-        let btnW =
-            min(310, width * 0.38);
+        let btnW;
 
-        if (compact) {
-            btnW =
-                min(290, width * 0.55);
+        if (mobile) {
+            btnW = min(300, width * 0.54);
+        } else {
+            btnW = min(310, width * 0.38);
+
+            if (compact) {
+                btnW = min(290, width * 0.55);
+            }
         }
 
         let btnH =
-            compact ? 46 : 50;
+            mobile ? 48 : (compact ? 46 : 50);
 
         let gap =
-            compact ? 10 : 12;
+            mobile ? 10 : (compact ? 10 : 12);
 
         let totalButtonsH =
             btnH * 4 + gap * 3;
 
-        let startY =
-            max(
+        let startY;
+
+        if (mobile) {
+            startY = max(
+                titleY + titleSize * 1.70,
+                height * 0.57
+            );
+        } else {
+            startY = max(
                 titleY + titleSize * 2.0,
                 height * (compact ? 0.56 : 0.54)
             );
+        }
 
         let maxStartY =
             height - totalButtonsH - 18;
@@ -6719,13 +6737,37 @@ function mousePressed() {
 
 
         // PAUSE
+        let mobile = isMobileLayout();
+
+        let qH = mobile ? 72 : 95;
+        let qY = mobile ? 12 : 15;
+
+        let infoY = mobile
+            ? qY + qH + 20
+            : 125;
+
+        let pauseW = mobile
+            ? min(145, width * 0.34)
+            : 175;
+
+        let pauseH = mobile
+            ? 42
+            : 52;
+
+        let pauseX = mobile
+            ? width / 2 - pauseW / 2
+            : 20;
+
+        let pauseY = mobile
+            ? infoY + 15
+            : 78;
 
         if (
             isButtonClicked(
-                20,
-                78,
-                220,
-                70
+                pauseX,
+                pauseY,
+                pauseW,
+                pauseH
             )
         ) {
 
