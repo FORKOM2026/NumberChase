@@ -52,7 +52,7 @@
 const MOBILE_BREAKPOINT = 600;   // dibandingkan dengan LEBAR VIRTUAL
 const LAND_H = 720;
 const LAND_W_MIN = 960;
-const LAND_W_MAX = 1440;
+const LAND_W_MAX = 2600;   // cukup lebar agar HP landscape memenuhi layar
 const PORT_H = 820;
 const PORT_W_MIN = 380;
 const PORT_W_MAX = 600;
@@ -1299,8 +1299,10 @@ function drawMainMenu() {
 
     if (mobile) {
         // Beri jarak aman dari judul/subjudul.
+        // Turun ke bawah: panel harus di bawah subjudul
+        // (titleSize*1.03 = posisi "FASE A • KELAS 2", 88 = headerSpace).
         startY = max(
-            titleY + titleSize * 1.70,
+            titleY + titleSize * 1.03 + 28 + 88,
             height * 0.57
         );
     } else {
@@ -6418,7 +6420,7 @@ function mousePressed() {
 
         if (mobile) {
             startY = max(
-                titleY + titleSize * 1.70,
+                titleY + titleSize * 1.03 + 28 + 88,
                 height * 0.57
             );
         } else {
