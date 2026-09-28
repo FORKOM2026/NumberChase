@@ -30,6 +30,39 @@
 
 
 // ============================================================
+// RESPONSIVE / MOBILE SUPPORT
+// ------------------------------------------------------------
+// Di layar besar (laptop/PC/tablet) tampilan TIDAK berubah (skala 1).
+// Di layar kecil (HP) kanvas dibuat sedikit lebih "luas" lalu
+// diperkecil lewat CSS agar semua elemen muat dan tetap bisa
+// dimainkan. Koordinat sentuhan dikonversi otomatis oleh p5.
+// ============================================================
+
+const MIN_VIEW_SIDE = 480;
+let gameCanvas = null;
+let touchHandling = false;
+let lastTouchMs = -10000;
+
+function getViewScale() {
+    let side = Math.min(windowWidth, windowHeight);
+    if (!side || side <= 0) return 1;
+    return Math.max(1, MIN_VIEW_SIDE / side);
+}
+
+function fitCanvasToWindow() {
+    let k = getViewScale();
+    resizeCanvas(
+        Math.ceil(windowWidth * k),
+        Math.ceil(windowHeight * k)
+    );
+    if (k > 1 && gameCanvas && gameCanvas.elt) {
+        gameCanvas.elt.style.width = windowWidth + "px";
+        gameCanvas.elt.style.height = windowHeight + "px";
+    }
+}
+
+
+// ============================================================
 // SCENE
 // ============================================================
 
@@ -656,11 +689,26 @@ function preload() {
 
 function setup() {
 
+    let viewK = getViewScale();
+
+    if (viewK > 1) {
+        pixelDensity(
+            Math.min(2, window.devicePixelRatio || 1)
+        );
+    }
+
     let canvas =
         createCanvas(
-            windowWidth,
-            windowHeight
+            Math.ceil(windowWidth * viewK),
+            Math.ceil(windowHeight * viewK)
         );
+
+    gameCanvas = canvas;
+
+    if (viewK > 1) {
+        canvas.elt.style.width = windowWidth + "px";
+        canvas.elt.style.height = windowHeight + "px";
+    }
 
     if (
         document.getElementById(
@@ -714,10 +762,7 @@ highScores = {
 
 function windowResized() {
 
-    resizeCanvas(
-        windowWidth,
-        windowHeight
-    );
+    fitCanvasToWindow();
 
     playerY =
         height * 0.78;
@@ -5953,20 +5998,57 @@ function drawGameOver() {
 // KEYBOARD & CONTROLS
 // ============================================================
 
-function touchStarted() {
+function touchStarted(event) {
 
-    // Fallback untuk perangkat layar sentuh.
-    initAudio();
-    unlockAudio();
+    // Sentuhan layar diperlakukan sama seperti klik mouse.
+    // (Sebelumnya return false membuat mousePressed() tidak
+    //  pernah terpanggil di HP, sehingga tombol tidak bisa ditekan.)
+    try {
 
-    if (currentScene === "GAMEPLAY") {
-        if (!isPaused) {
-            playGameplayMusic();
+        let t =
+            event && event.touches && event.touches[0]
+                ? event.touches[0]
+                : (touches && touches[0] ? touches[0] : null);
+
+        if (t && gameCanvas && gameCanvas.elt) {
+
+            let r = gameCanvas.elt.getBoundingClientRect();
+
+            if (t.clientX !== undefined && r.width > 0 && r.height > 0) {
+                mouseX = (t.clientX - r.left) * (width / r.width);
+                mouseY = (t.clientY - r.top) * (height / r.height);
+            } else if (t.x !== undefined) {
+                mouseX = t.x;
+                mouseY = t.y;
+            }
+
         }
-    } else {
-        playMenuMusic();
+
+    } catch (e) {
+        console.log("Sentuhan gagal dibaca:", e);
     }
 
+    touchHandling = true;
+
+    try {
+        mousePressed();
+    } catch (e) {
+        console.log("Error saat sentuhan:", e);
+    }
+
+    touchHandling = false;
+    lastTouchMs = millis();
+
+    return false;
+}
+
+
+// Cegah layar HP ikut bergeser / zoom saat bermain.
+function touchMoved() {
+    return false;
+}
+
+function touchEnded() {
     return false;
 }
 
@@ -6132,6 +6214,11 @@ function isButtonClicked(
 
 
 function mousePressed() {
+
+    // Abaikan klik tiruan yang muncul tepat setelah sentuhan.
+    if (!touchHandling && millis() - lastTouchMs < 700) {
+        return;
+    }
 
     // Unlock audio dari interaksi pertama.
     initAudio();
