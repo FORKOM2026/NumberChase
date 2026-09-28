@@ -749,8 +749,8 @@ let developers = [
 // Data dosen pembimbing
 // TODO: Ganti dengan data dosen pembimbing yang sebenarnya
 let pembimbing = {
-    name: "Qomario",
-    nip: "NIP. 198903262023211022",
+    name: "Prof. Dr. H. Ali Rachman, S.Pd., M.Pd. ",
+    nip: "NIP. 197604272008011011",
     univ: "Universitas Lambung Mangkurat"
 };
 
