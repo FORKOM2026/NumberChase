@@ -30,75 +30,183 @@
 
 
 // ============================================================
-// RESPONSIVE / MOBILE SUPPORT
+// ============================================================
+// RESPONSIVE / MULTI-DEVICE SUPPORT (VERSI PERBAIKAN)
 // ------------------------------------------------------------
-// Di layar besar (laptop/PC/tablet) tampilan TIDAK berubah (skala 1).
-// Di layar kecil (HP) kanvas dibuat sedikit lebih "luas" lalu
-// diperkecil lewat CSS agar semua elemen muat dan tetap bisa
-// dimainkan. Koordinat sentuhan dikonversi otomatis oleh p5.
+// Masalah lama: kanvas dibuat seukuran jendela (piksel asli),
+// sedangkan posisi tombol/HUD memakai angka piksel tetap. Akibatnya
+// tampilan hancur di ukuran layar yang berbeda.
+//
+// Solusi: game selalu digambar pada RESOLUSI VIRTUAL yang ukurannya
+// terkontrol (tergantung orientasi), lalu kanvas diskalakan lewat CSS
+// agar pas di layar (letterbox di tengah). Koordinat mouse/sentuhan
+// otomatis dikonversi oleh p5 (dan oleh touchStarted di bawah).
+//
+//  - LANDSCAPE (PC, laptop, tablet, HP miring):
+//      tinggi virtual 720, lebar 960 - 1440 mengikuti rasio layar.
+//  - PORTRAIT (HP, tablet tegak, "situs desktop" di HP):
+//      tinggi virtual 820, lebar 380 - 600 mengikuti rasio layar
+//      dan memakai layout HP (isMobileLayout).
 // ============================================================
 
-// ============================================================
-// RESPONSIVE / MOBILE SUPPORT
-// ------------------------------------------------------------
-// PC/tablet: tampilan tetap seperti sebelumnya.
-// HP: kanvas mengikuti ukuran viewport tanpa "membesarkan"
-// koordinat internal berdasarkan sisi terpendek. Ini mencegah
-// elemen menu/HUD saling tumpang tindih saat diperkecil browser.
-// ============================================================
+const MOBILE_BREAKPOINT = 600;   // dibandingkan dengan LEBAR VIRTUAL
+const LAND_H = 720;
+const LAND_W_MIN = 960;
+const LAND_W_MAX = 1440;
+const PORT_H = 820;
+const PORT_W_MIN = 380;
+const PORT_W_MAX = 600;
+const MAX_PIXEL_DENSITY = 2;
 
-function ensureMobileViewport() {
-    try {
-        let meta = document.querySelector('meta[name="viewport"]');
-        if (!meta) {
-            meta = document.createElement('meta');
-            meta.name = 'viewport';
-            document.head.appendChild(meta);
-        }
-        meta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
-        if (document.body) {
-            document.body.style.margin = '0';
-            document.body.style.padding = '0';
-            document.body.style.overflow = 'hidden';
-            document.body.style.background = '#061b10';
-        }
-    } catch (e) {
-        console.log('Viewport mobile tidak dapat diatur:', e);
-    }
-}
-
-const MOBILE_BREAKPOINT = 600;
 let gameCanvas = null;
 let touchHandling = false;
 let lastTouchMs = -10000;
+let viewInfo = { vw: LAND_W_MIN, vh: LAND_H, scale: 1 };
 
+function getViewportSize() {
+    // visualViewport lebih akurat di browser HP (toolbar dinamis).
+    let vv = window.visualViewport;
+    let w = vv && vv.width ? vv.width : window.innerWidth;
+    let h = vv && vv.height ? vv.height : window.innerHeight;
+    w = w || document.documentElement.clientWidth || 800;
+    h = h || document.documentElement.clientHeight || 600;
+    return { w: Math.max(1, w), h: Math.max(1, h) };
+}
+
+function computeViewInfo() {
+    let vp = getViewportSize();
+    let aspect = vp.w / vp.h;
+    let vw, vh;
+
+    if (aspect >= 1) {
+        vh = LAND_H;
+        vw = Math.round(constrain(LAND_H * aspect, LAND_W_MIN, LAND_W_MAX));
+    } else {
+        vh = PORT_H;
+        vw = Math.round(constrain(PORT_H * aspect, PORT_W_MIN, PORT_W_MAX));
+    }
+
+    let scale = Math.min(vp.w / vw, vp.h / vh);
+    return { vw: vw, vh: vh, scale: scale, cssW: vw * scale, cssH: vh * scale, vpW: vp.w, vpH: vp.h };
+}
+
+// Layout HP dipakai bila LEBAR VIRTUAL <= 600 (mode portrait).
 function isMobileLayout() {
-    let vw = (window.innerWidth || windowWidth || 0);
-    return vw <= MOBILE_BREAKPOINT;
+    return width <= MOBILE_BREAKPOINT;
 }
 
 function getViewScale() {
-    // Jangan scale-up kanvas di HP.
-    // P5 akan memakai koordinat viewport langsung sehingga layout
-    // responsif di fungsi draw dapat bekerja secara normal.
     return 1;
 }
 
+function preparePageStyle() {
+    // Pastikan meta viewport ada (tanpa ini HP memakai lebar 980px).
+    let meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+        meta = document.createElement("meta");
+        meta.name = "viewport";
+        document.head.appendChild(meta);
+    }
+    meta.content =
+        "width=device-width, initial-scale=1, maximum-scale=1, " +
+        "user-scalable=no, viewport-fit=cover";
+
+    let html = document.documentElement;
+    let body = document.body;
+    html.style.margin = "0";
+    html.style.padding = "0";
+    html.style.width = "100%";
+    html.style.height = "100%";
+    html.style.overflow = "hidden";
+    body.style.margin = "0";
+    body.style.padding = "0";
+    body.style.width = "100%";
+    body.style.height = "100%";
+    body.style.overflow = "hidden";
+    body.style.background = "#1f4d1a";
+    body.style.overscrollBehavior = "none";
+    body.style.touchAction = "none";
+    body.style.userSelect = "none";
+    body.style.webkitUserSelect = "none";
+    body.style.webkitTouchCallout = "none";
+    body.style.webkitTapHighlightColor = "transparent";
+
+    let container = document.getElementById("game-container");
+    if (container) {
+        container.style.position = "fixed";
+        container.style.left = "0";
+        container.style.top = "0";
+        container.style.width = "100%";
+        container.style.height = "100%";
+        container.style.overflow = "hidden";
+        container.style.margin = "0";
+        container.style.padding = "0";
+    }
+}
+
 function fitCanvasToWindow() {
-    let vw = window.innerWidth || windowWidth;
-    let vh = window.innerHeight || windowHeight;
-    resizeCanvas(
-        Math.max(1, Math.floor(vw)),
-        Math.max(1, Math.floor(vh))
-    );
+    let info = computeViewInfo();
+    let sizeChanged = (info.vw !== width || info.vh !== height);
+    viewInfo = info;
+
+    // Kerapatan piksel mengikuti skala agar tetap tajam saat diperbesar,
+    // tetapi dibatasi supaya tidak berat.
+    let dpr = window.devicePixelRatio || 1;
+    let density = constrain(dpr * info.scale, 1, MAX_PIXEL_DENSITY);
+    density = Math.round(density * 4) / 4;
+
+    if (Math.abs(density - pixelDensity()) > 0.01) {
+        pixelDensity(density);
+    }
+    if (sizeChanged) {
+        resizeCanvas(info.vw, info.vh);
+    }
 
     if (gameCanvas && gameCanvas.elt) {
-        gameCanvas.elt.style.width = "100vw";
-        gameCanvas.elt.style.height = "100vh";
-        gameCanvas.elt.style.maxWidth = "100%";
-        gameCanvas.elt.style.maxHeight = "100%";
-        gameCanvas.elt.style.display = "block";
-        gameCanvas.elt.style.touchAction = "none";
+        let s = gameCanvas.elt.style;
+        s.position = "fixed";
+        s.width = info.cssW + "px";
+        s.height = info.cssH + "px";
+        s.left = Math.round((info.vpW - info.cssW) / 2) + "px";
+        s.top = Math.round((info.vpH - info.cssH) / 2) + "px";
+        s.maxWidth = "none";
+        s.maxHeight = "none";
+        s.margin = "0";
+        s.display = "block";
+        s.touchAction = "none";
+    }
+}
+
+// Pasang listener tambahan (rotasi layar & perubahan toolbar HP).
+function installViewportListeners() {
+    let refit = function () {
+        fitCanvasToWindow();
+        relayoutAfterResize();
+    };
+    let delayedRefit = function () {
+        // Beberapa browser HP terlambat memperbarui ukuran setelah rotasi.
+        setTimeout(refit, 120);
+        setTimeout(refit, 350);
+        setTimeout(refit, 800);
+    };
+    window.addEventListener("orientationchange", delayedRefit);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", refit);
+    }
+    document.addEventListener("fullscreenchange", delayedRefit);
+    // Cegah pinch-zoom / scroll / menu klik-kanan pada kanvas.
+    document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+    document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+    document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+}
+
+function relayoutAfterResize() {
+    playerY = height * 0.78;
+    updatePlayerPosition();
+    createScenery();
+    createFallingLeaves();
+    if (currentScene === "GAMEPLAY") {
+        playerX = playerTargetX;
     }
 }
 
@@ -730,31 +838,23 @@ function preload() {
 
 function setup() {
 
-    ensureMobileViewport();
+    preparePageStyle();
 
-    let viewK = getViewScale();
+    let info = computeViewInfo();
+    viewInfo = info;
 
     pixelDensity(
-        Math.min(2, window.devicePixelRatio || 1)
+        constrain(
+            (window.devicePixelRatio || 1) * info.scale,
+            1,
+            MAX_PIXEL_DENSITY
+        )
     );
 
-    let canvasW = isMobileLayout() ? (window.innerWidth || windowWidth) : windowWidth;
-    let canvasH = isMobileLayout() ? (window.innerHeight || windowHeight) : windowHeight;
-
     let canvas =
-        createCanvas(
-            Math.max(1, Math.floor(canvasW * viewK)),
-            Math.max(1, Math.floor(canvasH * viewK))
-        );
+        createCanvas(info.vw, info.vh);
 
     gameCanvas = canvas;
-
-    canvas.elt.style.width = "100vw";
-    canvas.elt.style.height = "100vh";
-    canvas.elt.style.maxWidth = "100%";
-    canvas.elt.style.maxHeight = "100%";
-    canvas.elt.style.display = "block";
-    canvas.elt.style.touchAction = "none";
 
     if (
         document.getElementById(
@@ -767,6 +867,9 @@ function setup() {
         );
 
     }
+
+    fitCanvasToWindow();
+    installViewportListeners();
 
     textAlign(
         CENTER,
@@ -810,21 +913,7 @@ function windowResized() {
 
     fitCanvasToWindow();
 
-    playerY =
-        height * 0.78;
-
-    updatePlayerPosition();
-
-    createScenery();
-
-    if (
-        currentScene === "GAMEPLAY"
-    ) {
-
-        playerX =
-            playerTargetX;
-
-    }
+    relayoutAfterResize();
 }
 
 
@@ -835,6 +924,11 @@ function windowResized() {
 function draw() {
 
     cursor(ARROW);
+
+    // Pastikan pengaturan dasar tidak hilang setelah resize/rotasi.
+    textAlign(CENTER, CENTER);
+    imageMode(CENTER);
+    rectMode(CORNER);
 
 
     if (
@@ -2205,11 +2299,6 @@ function drawLevelSelect() {
 function drawAbout() {
     drawMenuBackground();
 
-    if (isMobileLayout()) {
-        drawAboutMobile();
-        return;
-    }
-
     // Panel responsif
     let w = min(720, width * 0.90);
     let h = min(580, height * 0.85);
@@ -2367,61 +2456,6 @@ function drawAbout() {
         drawButton(x + w - btnW - 30, bottomY, btnW, btnH, "‹  Sebelumnya", "#388E3C");
     }
 }
-function drawAboutMobile() {
-    let w = min(380, width * 0.92);
-    let h = min(790, height * 0.91);
-    let x = width / 2 - w / 2;
-    let y = height / 2 - h / 2;
-    drawPanel(x, y, w, h);
-
-    fill(255, 215, 0); textFont("Luckiest Guy"); textAlign(CENTER, CENTER);
-    textSize(min(28, w * 0.075)); text("TENTANG GAME", width / 2, y + 31);
-    fill(255,255,255,210); textFont("Fredoka One"); textSize(10.5);
-    text(aboutSlide === 0 ? "SLIDE 1 • PENJELASAN GAME" : "SLIDE 2 • CAPAIAN & TUJUAN PEMBELAJARAN", width/2, y+58);
-
-    let cardX=x+13, cardY=y+78, cardW=w-26, cardH=h-137;
-    fill(38,28,17,235); stroke(218,170,0); strokeWeight(2); rect(cardX,cardY,cardW,cardH,15); noStroke();
-
-    if (aboutSlide === 0) {
-        fill(255,215,0); textFont("Luckiest Guy"); textSize(17);
-        text("NUMBER CHASE - NATURE MATH ADVENTURE", width/2, cardY+28);
-        fill(255); textFont("Fredoka One"); textSize(10.5);
-        let lines=[
-            "Media Pembelajaran Interaktif (MPI) untuk mapel",
-            "Matematika Kelas 2 / Fase A, dengan materi",
-            "penjumlahan dan pengurangan.","",
-            "Dikemas sebagai game lari (running game) bertema",
-            "alam: siswa berlari melintasi 3 jalur dan memilih",
-            "jalur dengan jawaban yang benar.","",
-            "Menggunakan strategi Drill and Practice agar siswa",
-            "berlatih berhitung berulang dengan cara yang seru.","",
-            "Fitur: 3 tingkat kesulitan, efek visual & partikel,",
-            "sistem nyawa, timer per soal, dan skor tertinggi."
-        ];
-        let yy=cardY+58; for (let line of lines){ text(line,width/2,yy); yy+=21; }
-    } else {
-        fill(255,215,0); textFont("Luckiest Guy"); textSize(18);
-        text("CAPAIAN & TUJUAN PEMBELAJARAN", width/2, cardY+28);
-        let cpY=cardY+48, cpH=112;
-        fill(92,150,64,180); rect(cardX+10,cpY,cardW-20,cpH,12);
-        fill(255,215,0); textSize(14); text("CAPAIAN PEMBELAJARAN (CP)",width/2,cpY+21);
-        fill(255); textFont("Fredoka One"); textSize(10.5);
-        text("Peserta didik dapat menunjukkan pemahaman operasi",width/2,cpY+52);
-        text("penjumlahan dan pengurangan bilangan cacah 1 sampai 20.",width/2,cpY+70);
-        let tpY=cpY+cpH+12, tpH=cardH-(tpY-cardY)-12;
-        fill(67,120,170,180); rect(cardX+10,tpY,cardW-20,tpH,12);
-        fill(255,215,0); textSize(14); text("TUJUAN PEMBELAJARAN (TP)",width/2,tpY+21);
-        fill(255); textFont("Fredoka One"); textSize(9.5); textAlign(LEFT,CENTER);
-        let tx=cardX+19, baseY=tpY+54;
-        let tp=[["1. Mengoperasikan konsep penjumlahan dan","   pengurangan bilangan satuan-satuan."],["2. Mengoperasikan konsep penjumlahan dan","   pengurangan bilangan satuan-puluhan."],["3. Mengoperasikan konsep penjumlahan dan","   pengurangan bilangan puluhan-puluhan."]];
-        for(let i=0;i<3;i++){text(tp[i][0],tx,baseY+i*49);text(tp[i][1],tx,baseY+17+i*49);}
-        textAlign(CENTER,CENTER);
-    }
-    let bw=min(145,w*0.40), by=y+h-44;
-    drawButton(x+16,by,bw,36,"Menu Utama","#D32F2F");
-    drawButton(x+w-bw-16,by,bw,36,aboutSlide===0?"Berikutnya  ›":"‹  Sebelumnya","#388E3C");
-}
-
 // ============================================================
 // PROFIL PENGEMBANG
 // ============================================================
@@ -2429,11 +2463,6 @@ function drawAboutMobile() {
 function drawProfile() {
 
     drawMenuBackground();
-
-    if (isMobileLayout()) {
-        drawProfileMobile();
-        return;
-    }
 
 
     let w = min(940, width * 0.94);
@@ -2801,42 +2830,6 @@ function drawProfile() {
     );
 }
 
-
-function drawProfileMobile() {
-    let w=min(390,width*0.94), h=min(870,height*0.93);
-    let x=width/2-w/2, y=height/2-h/2;
-    drawPanel(x,y,w,h);
-    fill(255,215,0); textFont("Luckiest Guy"); textAlign(CENTER,CENTER); textSize(min(25,w*0.07));
-    text("PROFIL PENGEMBANG",width/2,y+29);
-    fill(255,255,255,225); textFont("Fredoka One"); textSize(8.5);
-    text("NUMBER CHASE - Multimedia Pembelajaran Interaktif",width/2,y+49);
-    text("Matematika Kelas II / Fase A",width/2,y+62);
-    drawSectionLabel("TIM PENGEMBANG",width/2,y+84,w);
-
-    let gap=7, cardW=(w-28-gap*2)/3, cardH=170, top=y+98;
-    for(let i=0;i<3;i++){
-        let cx=x+14+cardW/2+i*(cardW+gap), cy=top+cardH/2; push(); translate(cx,cy);
-        noStroke(); fill(0,0,0,90); rect(-cardW/2+3,-cardH/2+5,cardW,cardH,12);
-        fill(45,38,25,235); rect(-cardW/2,-cardH/2,cardW,cardH,12);
-        let d=min(58,cardW*0.62), py=-cardH/2+39;
-        fill(255,215,0); stroke(70,45,15); strokeWeight(2); ellipse(0,py,d+5,d+5); noStroke(); fill(255); ellipse(0,py,d-2,d-2);
-        if(devImages[i]){let cd=d-7; drawingContext.save(); drawingContext.beginPath(); drawingContext.arc(0,py,cd/2,0,TWO_PI); drawingContext.clip(); imageMode(CENTER); let im=devImages[i],r=im.width/im.height,dw=cd,dh=cd; if(r>1)dw=cd*r; else dh=cd/r; image(im,0,py,dw,dh); drawingContext.restore();}
-        fill(255,225,135); textFont("Fredoka One"); textSize(min(9,cardW*0.105)); text(developers[i].name,0,83-cardH/2);
-        stroke(255,255,255,45); strokeWeight(1); line(-cardW*.36,94-cardH/2,cardW*.36,94-cardH/2); noStroke();
-        fill(255,255,255,225); textSize(min(7.5,cardW*.085)); text(developers[i].nim,0,109-cardH/2);
-        fill(255,255,255,190); textSize(min(7,cardW*.078)); text("Universitas Lambung",0,127-cardH/2); text("Mangkurat",0,140-cardH/2);
-        pop();
-    }
-
-    let sec2Y=top+cardH+22; drawSectionLabel("DOSEN PEMBIMBING",width/2,sec2Y,w);
-    let pw=w-28, ph=86, py=sec2Y+10; push(); translate(width/2,py+ph/2);
-    noStroke(); fill(0,0,0,90); rect(-pw/2+3,-ph/2+4,pw,ph,13); fill(55,42,20,240); rect(-pw/2,-ph/2,pw,ph,13);
-    noFill(); stroke(255,215,0,200); strokeWeight(2); rect(-pw/2,-ph/2,pw,ph,13); noStroke();
-    let pd=58, px=-pw/2+43; fill(255,215,0); ellipse(px,0,pd+5,pd+5); fill(255); ellipse(px,0,pd-2,pd-2);
-    if(imgPembimbing){let cd=pd-7; drawingContext.save(); drawingContext.beginPath(); drawingContext.arc(px,0,cd/2,0,TWO_PI); drawingContext.clip(); imageMode(CENTER); let im=imgPembimbing,r=im.width/im.height,dw=cd,dh=cd; if(r>1)dw=cd*r; else dh=cd/r; image(im,px,0,dw,dh); drawingContext.restore();}
-    textAlign(LEFT,CENTER); fill(255,225,135); textFont("Fredoka One"); textSize(15); text(pembimbing.name,px+40,-20); fill(255,215,0,220); textSize(9); text("Dosen Pembimbing",px+40,-2); fill(255,255,255,210); textSize(8); text(pembimbing.nip,px+40,15); text(pembimbing.univ,px+40,30); textAlign(CENTER,CENTER); pop();
-    drawButton(width/2-105,y+h-42,210,38,"Menu Utama","#D32F2F");
-}
 
 // ------------------------------------------------------------
 // LABEL SEKSI (dengan garis dekoratif di kiri/kanan)
@@ -6971,14 +6964,20 @@ function mousePressed() {
         }
 
 
+        // Ukuran tombol kontrol HARUS sama dengan drawGameplayHUD().
+        let ctrlW = mobile ? 68 : 75;
+        let ctrlH = mobile ? 50 : 55;
+        let ctrlY = height - (mobile ? 62 : 80);
+        let ctrlPad = mobile ? 18 : 25;
+
         // LEFT
 
         if (
             isButtonClicked(
-                25,
-                height - 80,
-                75,
-                55
+                ctrlPad,
+                ctrlY,
+                ctrlW,
+                ctrlH
             )
         ) {
 
@@ -6995,10 +6994,10 @@ function mousePressed() {
 
         if (
             isButtonClicked(
-                width - 100,
-                height - 80,
-                75,
-                55
+                width - ctrlW - ctrlPad,
+                ctrlY,
+                ctrlW,
+                ctrlH
             )
         ) {
 
@@ -7024,7 +7023,7 @@ function mousePressed() {
             mouseX >= trackX &&
             mouseX <=
                 trackX + trackW &&
-            mouseY > 130 &&
+            mouseY > (mobile ? infoY + 15 + 42 : 130) &&
             mouseY < height
         ) {
 
@@ -7261,4 +7260,3 @@ function drawNatureBackground() {
 
     }
 }
-
